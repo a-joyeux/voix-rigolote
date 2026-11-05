@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ma voix rigolote</title>
+<meta name="theme-color" content="#FFD84D" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#211F52" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Enregistre ta voix et transforme-la en souris, robot, dragon…">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Voix rigolote">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFD84D; --text:#2A2766; --ink:#2A2766; --face:#FFF8E1; --rec:#FF4F5E;
+  --c0:#FF8FB1; --c1:#5CCFE6; --c2:#8EE07A; --c3:#C3A3FF; --c4:#FFA552; --c5:#7FE3C8;
+  --tile-text:#2A2766; --soft:rgba(42,39,102,.12);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#211F52; --text:#FFF1C9; --ink:#0F0D33; --face:#FFF1C9; --soft:rgba(255,241,201,.12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#211F52; --text:#FFF1C9; --ink:#0F0D33; --face:#FFF1C9; --soft:rgba(255,241,201,.12);
+  color-scheme: dark;
+}
+:root{ box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+*,*::before,*::after{ box-sizing:inherit; }
+html,body{ margin:0; }
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Baloo 2","Comic Sans MS","Chalkboard SE","Trebuchet MS",system-ui,sans-serif;
+  -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;
+  min-height:100%;
+}
+main{ max-width:880px; margin:0 auto; padding:16px 16px 40px; }
+h1{ font-size:clamp(1.6rem,6vw,2.4rem); font-weight:800; text-align:center; margin:4px 0 8px; line-height:1.1; }
+
+.stage{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+.face-btn{
+  width:min(62vw,250px); aspect-ratio:1; padding:0; border:0; background:none; cursor:pointer;
+  border-radius:50%; touch-action:manipulation;
+}
+.face-btn:focus-visible{ outline:6px solid var(--text); outline-offset:6px; }
+.face-btn svg{ width:100%; height:100%; display:block; overflow:visible; }
+.face-circle{ fill:var(--face); stroke:var(--ink); stroke-width:6; transition:fill .2s; }
+.face-shadow{ fill:var(--ink); }
+.mouth{ fill:var(--ink); }
+.smile{ fill:none; stroke:var(--ink); stroke-width:7; stroke-linecap:round; }
+.cheek{ fill:#FF8FB1; opacity:.7; }
+.ring{ fill:none; stroke:var(--rec); stroke-width:10; stroke-linecap:round; transform:rotate(-90deg); transform-origin:100px 100px; }
+.is-recording .face-circle{ fill:#FFC7CC; }
+
+.hint{
+  font-size:clamp(1.25rem,5vw,1.6rem); font-weight:800; text-align:center; min-height:2.6em;
+  display:flex; align-items:center; justify-content:center; gap:.4em; margin:0; line-height:1.15;
+}
+.error{
+  background:var(--face); color:#2A2766; border:4px solid var(--ink); border-radius:22px;
+  padding:12px 16px; max-width:460px; text-align:center; font-size:1.05rem; font-weight:600;
+  box-shadow:0 5px 0 var(--ink); display:none;
+}
+.error strong{ display:block; font-size:1.5rem; }
+.error.show{ display:block; }
+
+.grid{
+  list-style:none; padding:0; margin:18px 0 0;
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(102px,1fr)); gap:14px;
+}
+.tile{
+  width:100%; aspect-ratio:1; border:4px solid var(--ink); border-radius:28px;
+  background:var(--c); color:var(--tile-text); cursor:pointer; font:inherit;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  box-shadow:0 6px 0 var(--ink); transition:transform .08s, box-shadow .08s, opacity .2s;
+  touch-action:manipulation; padding:4px;
+}
+.tile .emo{ font-size:clamp(2.4rem,9vw,3.1rem); line-height:1; }
+.tile .name{ font-size:1.05rem; font-weight:800; line-height:1.1; }
+.tile:active{ transform:translateY(5px); box-shadow:0 1px 0 var(--ink); }
+.tile:focus-visible{ outline:5px solid var(--text); outline-offset:4px; }
+.grid.locked .tile{ opacity:.5; }
+.tile.playing{ transform:translateY(5px) scale(1.04); box-shadow:0 1px 0 var(--ink); animation:bob .45s ease-in-out infinite alternate; }
+
+.wiggle{ animation:wiggle .5s ease-in-out; }
+@keyframes wiggle{ 0%,100%{transform:rotate(0)} 25%{transform:rotate(-9deg)} 75%{transform:rotate(9deg)} }
+@keyframes bob{ from{ transform:translateY(5px) scale(1.02) rotate(-2deg);} to{ transform:translateY(5px) scale(1.07) rotate(2deg);} }
+@media (prefers-reduced-motion: reduce){
+  .tile.playing,.wiggle{ animation:none; }
+}
+.sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ma voix rigolote</h1>
+
+  <section class="stage">
+    <button class="face-btn" id="faceBtn" aria-label="Enregistrer ma voix">
+      <svg viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="face-shadow" cx="100" cy="106" r="88"/>
+        <circle class="face-circle" id="faceCircle" cx="100" cy="100" r="88"/>
+        <circle class="ring" id="ring" cx="100" cy="100" r="97" stroke-dasharray="609.5" stroke-dashoffset="609.5"/>
+        <ellipse cx="70" cy="80" rx="11" ry="15" fill="var(--ink)"/>
+        <ellipse cx="130" cy="80" rx="11" ry="15" fill="var(--ink)"/>
+        <circle cx="73" cy="75" r="4" fill="#fff"/>
+        <circle cx="133" cy="75" r="4" fill="#fff"/>
+        <ellipse class="cheek" cx="50" cy="112" rx="13" ry="8"/>
+        <ellipse class="cheek" cx="150" cy="112" rx="13" ry="8"/>
+        <path class="smile" id="smile" d="M70 128 Q100 156 130 128"/>
+        <ellipse class="mouth" id="mouth" cx="100" cy="136" rx="26" ry="6" style="display:none"/>
+      </svg>
+    </button>
+    <p class="hint" id="hint" aria-live="polite"><span>👆</span><span>Appuie sur la tête et parle !</span></p>
+    <div class="error" id="error" role="alert">
+      <strong>🎤🚫</strong>
+      Le micro ne marche pas ici. Autorisez le micro dans le navigateur, puis réessayez. Sur Android : Paramètres › Applications › Voix rigolote › Autorisations › Micro.
+    </div>
+  </section>
+
+  <ul class="grid locked" id="grid" aria-label="Effets de voix"></ul>
+</main>
+
+<script>
+(() => {
+  const EFFECTS = [
+    { id:'normal',   emoji:'🙂', name:'Normal' },
+    { id:'souris',   emoji:'🐭', name:'Souris' },
+    { id:'ours',     emoji:'🐻', name:'Ours' },
+    { id:'robot',    emoji:'🤖', name:'Robot' },
+    { id:'alien',    emoji:'👽', name:'Alien' },
+    { id:'fantome',  emoji:'👻', name:'Fantôme' },
+    { id:'echo',     emoji:'⛰️', name:'Écho' },
+    { id:'grotte',   emoji:'🕳️', name:'Grotte' },
+    { id:'eau',      emoji:'🐟', name:'Sous l’eau' },
+    { id:'tel',      emoji:'📞', name:'Téléphone' },
+    { id:'megaphone',emoji:'📣', name:'Mégaphone' },
+    { id:'bebe',     emoji:'👶', name:'Bébé' },
+    { id:'monstre',  emoji:'👹', name:'Monstre' },
+    { id:'dragon',   emoji:'🐉', name:'Dragon' },
+    { id:'abeille',  emoji:'🐝', name:'Abeille' },
+    { id:'envers',   emoji:'🔄', name:'À l’envers' },
+    { id:'escargot', emoji:'🐌', name:'Escargot' },
+    { id:'fusee',    emoji:'🚀', name:'Fusée' },
+    { id:'copains',  emoji:'👯', name:'Les copains' },
+    { id:'radio',    emoji:'📻', name:'Radio' },
+    { id:'tourbillon',emoji:'🌀', name:'Tourbillon' },
+    { id:'brrr',     emoji:'🥶', name:'Brrr' },
+    { id:'sorciere', emoji:'🧙', name:'Sorcière' },
+    { id:'perroquet',emoji:'🦜', name:'Perroquet' },
+  ];
+
+  const $ = id => document.getElementById(id);
+  const grid = $('grid'), faceBtn = $('faceBtn'), hint = $('hint'), errorBox = $('error');
+  const mouth = $('mouth'), smile = $('smile'), progRing = $('ring'), faceCircle = $('faceCircle');
+  const MAX_REC = 10; // secondes
+  const RING_LEN = 609.5;
+
+  let ctx, master, outAnalyser, micAnalyser;
+  let voiceBuf = null, revBuf = null;
+  let state = 'idle'; // idle | recording | ready
+  let rec, recStream, recTimer, recStart = 0;
+  let current = null;
+  let G = null;
+
+  // ---------- Interface ----------
+  EFFECTS.forEach((fx, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.className = 'tile';
+    b.style.setProperty('--c', `var(--c${i % 6})`);
+    b.dataset.id = fx.id;
+    b.setAttribute('aria-label', 'Voix ' + fx.name);
+    b.innerHTML = `<span class="emo" aria-hidden="true">${fx.emoji}</span><span class="name">${fx.name}</span>`;
+    b.addEventListener('click', () => onTile(fx, b));
+    li.appendChild(b);
+    grid.appendChild(li);
+  });
+
+  function setHint(emoji, text){
+    hint.innerHTML = '';
+    const a = document.createElement('span'); a.textContent = emoji;
+    const t = document.createElement('span'); t.textContent = text;
+    hint.append(a, t);
+  }
+  function wiggle(el){
+    el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle');
+  }
+
+  // ---------- Audio de base ----------
+  function ensureCtx(){
+    if (!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = 0.9;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.ratio.value = 6;
+      outAnalyser = ctx.createAnalyser(); outAnalyser.fftSize = 1024;
+      master.connect(comp); comp.connect(outAnalyser); outAnalyser.connect(ctx.destination);
+      micAnalyser = ctx.createAnalyser(); micAnalyser.fftSize = 1024;
+      requestAnimationFrame(animate);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+
+  // ---------- Enregistrement ----------
+  faceBtn.addEventListener('click', () => {
+    if (state === 'recording') stopRec(); else startRec();
+  });
+
+  async function startRec(){
+    ensureCtx();
+    stopPlayback();
+    errorBox.classList.remove('show');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){
+      showMicError(); return;
+    }
+    try {
+      recStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    } catch(e){ showMicError(); return; }
+
+    const micSrc = ctx.createMediaStreamSource(recStream);
+    micSrc.connect(micAnalyser); // jamais vers les haut-parleurs : pas de larsen
+    const chunks = [];
+    rec = new MediaRecorder(recStream);
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = async () => {
+      micSrc.disconnect();
+      recStream.getTracks().forEach(t => t.stop());
+      try {
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        const arr = await blob.arrayBuffer();
+        const decoded = await ctx.decodeAudioData(arr);
+        prepareBuffers(decoded);
+        state = 'ready';
+        grid.classList.remove('locked');
+        faceBtn.setAttribute('aria-label', 'Enregistrer encore');
+        setHint('🎉', 'Choisis un son !');
+      } catch(e){
+        state = voiceBuf ? 'ready' : 'idle';
+        setHint('😕', 'Oups ! Appuie encore sur la tête.');
+      }
+    };
+    rec.start();
+    state = 'recording';
+    recStart = performance.now();
+    document.body.classList.add('is-recording');
+    faceBtn.setAttribute('aria-label', 'Arrêter l’enregistrement');
+    setHint('👂', 'Je t’écoute… Appuie pour finir');
+    recTimer = setTimeout(stopRec, MAX_REC * 1000);
+  }
+
+  function stopRec(){
+    if (state !== 'recording') return;
+    clearTimeout(recTimer);
+    state = 'processing';
+    document.body.classList.remove('is-recording');
+    progRing.style.strokeDashoffset = RING_LEN;
+    setHint('⏳', 'Une seconde…');
+    try { rec.stop(); } catch(e){}
+  }
+
+  function showMicError(){
+    state = voiceBuf ? 'ready' : 'idle';
+    errorBox.classList.add('show');
+    setHint('🙈', 'Pas de micro');
+  }
+
+  // Mono, coupe les silences du début et de la fin, monte le volume
+  function prepareBuffers(b){
+    const n = b.length, sr = b.sampleRate, chs = b.numberOfChannels;
+    const mono = new Float32Array(n);
+    for (let c = 0; c < chs; c++){
+      const d = b.getChannelData(c);
+      for (let i = 0; i < n; i++) mono[i] += d[i] / chs;
+    }
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(mono[i]));
+    const thr = Math.max(0.01, peak * 0.08);
+    let s = 0, e = n - 1;
+    while (s < n && Math.abs(mono[s]) < thr) s++;
+    while (e > s && Math.abs(mono[e]) < thr) e--;
+    s = Math.max(0, s - Math.floor(sr * 0.05));
+    e = Math.min(n - 1, e + Math.floor(sr * 0.15));
+    if (e - s < sr * 0.2){ s = 0; e = n - 1; }
+    const len = e - s + 1;
+    const gainNorm = peak > 0 ? 0.95 / peak : 1;
+    voiceBuf = ctx.createBuffer(1, len, sr);
+    revBuf = ctx.createBuffer(1, len, sr);
+    const v = voiceBuf.getChannelData(0), r = revBuf.getChannelData(0);
+    const fade = Math.min(Math.floor(sr * 0.01), Math.floor(len / 4));
+    for (let i = 0; i < len; i++){
+      let x = mono[s + i] * gainNorm;
+      if (i < fade) x *= i / fade;
+      if (i > len - fade) x *= (len - i) / fade;
+      v[i] = x; r[len - 1 - i] = x;
+    }
+  }
+
+  // ---------- Briques d'effets ----------
+  function src(rate = 1, opt = {}){
+    const s = ctx.createBufferSource();
+    s.buffer = opt.reverse ? revBuf : voiceBuf;
+    s.playbackRate.value = rate;
+    const at = opt.at || 0;
+    G.srcs.push({ s, at });
+    G.end = Math.max(G.end, at + s.buffer.duration / rate);
+    return s;
+  }
+  function gain(v){ const g = ctx.createGain(); g.gain.value = v; return g; }
+  function filt(type, f, q = 1){ const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; }
+  function lfo(freq, depth, param, type = 'sine'){
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
+    const g = gain(depth); o.connect(g); g.connect(param); o.start();
+    G.extras.push(o); return o;
+  }
+  function ring(freq){ const g = gain(0); lfo(freq, 1, g.gain); return g; }
+  function shaper(k){
+    const w = ctx.createWaveShaper(), N = 2048, c = new Float32Array(N);
+    for (let i = 0; i < N; i++){ const x = i * 2 / N - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
+    w.curve = c; w.oversample = '2x'; return w;
+  }
+  function reverb(sec, decay){
+    const sr = ctx.sampleRate, len = Math.floor(sr * sec);
+    const ir = ctx.createBuffer(2, len, sr);
+    for (let c = 0; c < 2; c++){
+      const d = ir.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    const cv = ctx.createConvolver(); cv.buffer = ir; return cv;
+  }
+  function echo(time, fb){
+    const d = ctx.createDelay(2); d.delayTime.value = time;
+    const f = gain(fb); d.connect(f); f.connect(d);
+    return d;
+  }
+  function noise(level){
+    const sr = ctx.sampleRate, b = ctx.createBuffer(1, sr * 2, sr), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() < 0.002 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.25;
+    const s = ctx.createBufferSource(); s.buffer = b; s.loop = true;
+    const g = gain(level); s.connect(g); s.start();
+    G.extras.push(s); return g;
+  }
+  function chain(...nodes){ for (let i = 0; i < nodes.length - 1; i++) nodes[i].connect(nodes[i + 1]); return nodes[nodes.length - 1]; }
+
+  // ---------- Les effets ----------
+  const BUILD = {
+    normal:   out => { chain(src(1), out); },
+    souris:   out => { chain(src(1.8), out); },
+    ours:     out => { chain(src(0.7), filt('lowshelf', 250, 1), out); },
+    robot:    out => {
+      const s = src(1), r = ring(55);
+      chain(s, r, shaper(4), gain(0.9), out);
+      const e = echo(0.012, 0.6); chain(r, e, gain(0.4), out);
+      return 0.3;
+    },
+    alien:    out => {
+      const s = src(1.15); lfo(7, 250, s.detune);
+      s.connect(gain(0.5)).connect(out);
+      chain(s, ring(220), gain(0.7), out);
+    },
+    fantome:  out => {
+      const s = src(0.85); lfo(1.2, 120, s.detune);
+      s.connect(gain(0.35)).connect(out);
+      chain(s, reverb(4, 2), gain(0.9), out);
+      return 4;
+    },
+    echo:     out => {
+      const s = src(1); s.connect(out);
+      chain(s, echo(0.32, 0.55), gain(0.8), out);
+      return 3;
+    },
+    grotte:   out => {
+      const s = src(1); s.connect(gain(0.6)).connect(out);
+      chain(s, reverb(2.5, 3), gain(0.9), out);
+      return 2.5;
+    },
+    eau:      out => {
+      const s = src(0.9); lfo(5, 90, s.detune);
+      chain(s, filt('lowpass', 500, 6), gain(1.4), out);
+      return 0.3;
+    },
+    tel:      out => { chain(src(1), filt('highpass', 450, 0.7), filt('lowpass', 3000, 0.7), shaper(8), gain(0.8), out); },
+    megaphone:out => { chain(src(1), filt('highpass', 700, 1), filt('lowpass', 3800, 1), shaper(40), gain(0.6), out); },
+    bebe:     out => { const s = src(1.45); lfo(6, 40, s.detune); s.connect(out); },
+    monstre:  out => {
+      const s = src(0.55);
+      chain(s, shaper(12), filt('lowshelf', 200, 1), gain(0.8), out);
+      chain(s, ring(70), gain(0.35), out);
+    },
+    dragon:   out => {
+      const s = src(0.62); lfo(3, 60, s.detune);
+      const d = chain(s, shaper(60), filt('lowpass', 2500, 1), gain(0.6));
+      d.connect(out);
+      chain(d, reverb(2, 2.5), gain(0.6), out);
+      return 2;
+    },
+    abeille:  out => { const s = src(1.5); lfo(28, 130, s.detune); s.connect(out); },
+    envers:   out => { chain(src(1, { reverse:true }), out); },
+    escargot: out => { chain(src(0.42), out); },
+    fusee:    out => {
+      const s = src(2.2), p = ctx.createStereoPanner();
+      lfo(1.5, 1, p.pan); chain(s, p, out);
+    },
+    copains:  out => {
+      [[1, -0.7], [1.3, 0], [0.75, 0.7]].forEach(([rate, pan]) => {
+        const p = ctx.createStereoPanner(); p.pan.value = pan;
+        chain(src(rate), gain(0.55), p, out);
+      });
+    },
+    radio:    out => {
+      chain(src(1), filt('bandpass', 1200, 0.8), shaper(15), gain(1.1), out);
+      chain(noise(0.06), filt('highpass', 1500, 0.7), out);
+    },
+    tourbillon: out => {
+      const s = src(1), p = ctx.createStereoPanner();
+      lfo(3, 150, s.detune); lfo(1.2, 1, p.pan);
+      chain(s, p, out);
+    },
+    brrr:     out => {
+      const s = src(1.05), g = gain(0.5);
+      lfo(14, 0.5, g.gain); chain(s, g, out);
+    },
+    sorciere: out => {
+      const s = src(1.25); lfo(5, 70, s.detune);
+      s.connect(gain(0.6)).connect(out);
+      chain(s, ring(110), gain(0.5), out);
+      chain(s, echo(0.18, 0.3), gain(0.3), out);
+      return 1;
+    },
+    perroquet: out => {
+      const a = src(1);
+      a.connect(out);
+      const b = src(1.35, { at: voiceBuf.duration + 0.25 });
+      b.connect(out);
+    },
+  };
+
+  // ---------- Lecture ----------
+  function onTile(fx, btn){
+    ensureCtx();
+    if (state === 'recording'){ stopRec(); return; }
+    if (!voiceBuf){
+      wiggle(faceBtn);
+      setHint('👆', 'D’abord, appuie sur la tête et parle !');
+      return;
+    }
+    if (current && current.id === fx.id){ stopPlayback(); return; }
+    play(fx, btn);
+  }
+
+  function play(fx, btn){
+    stopPlayback();
+    G = { srcs: [], extras: [], end: 0 };
+    const out = gain(1);
+    out.connect(master);
+    const tail = BUILD[fx.id](out) || 0.15;
+    const t0 = ctx.currentTime + 0.04;
+    G.srcs.forEach(({ s, at }) => s.start(t0 + at));
+    const g = G;
+    btn.classList.add('playing');
+    faceCircle.style.fill = getComputedStyle(btn).backgroundColor;
+    setHint(fx.emoji, fx.name + ' !');
+    current = {
+      id: fx.id, g, out, btn,
+      timer: setTimeout(() => { if (current && current.g === g) stopPlayback(true); }, (g.end + tail) * 1000 + 80),
+    };
+  }
+
+  function stopPlayback(ended){
+    if (!current) return;
+    const c = current; current = null;
+    clearTimeout(c.timer);
+    c.g.srcs.forEach(({ s }) => { try { s.stop(); } catch(e){} });
+    c.g.extras.forEach(o => { try { o.stop(); } catch(e){} });
+    try { c.out.disconnect(); } catch(e){}
+    c.btn.classList.remove('playing');
+    faceCircle.style.fill = '';
+    if (ended && state === 'ready') setHint('🎉', 'Encore un son ?');
+  }
+
+  // ---------- Bouche animée ----------
+  const td = new Uint8Array(1024);
+  let level = 0;
+  function animate(){
+    let an = null;
+    if (state === 'recording') an = micAnalyser;
+    else if (current) an = outAnalyser;
+    let target = 0;
+    if (an){
+      an.getByteTimeDomainData(td);
+      let sum = 0;
+      for (let i = 0; i < td.length; i++){ const v = (td[i] - 128) / 128; sum += v * v; }
+      target = Math.min(1, Math.sqrt(sum / td.length) * 5);
+    }
+    level += (target - level) * 0.35;
+    const talking = !!an;
+    smile.style.display = talking ? 'none' : '';
+    mouth.style.display = talking ? '' : 'none';
+    if (talking){
+      mouth.setAttribute('ry', (5 + level * 30).toFixed(1));
+      mouth.setAttribute('rx', (24 + level * 8).toFixed(1));
+    }
+    if (state === 'recording'){
+      const p = Math.min(1, (performance.now() - recStart) / (MAX_REC * 1000));
+      progRing.style.strokeDashoffset = (RING_LEN * (1 - p)).toFixed(1);
+    }
+    requestAnimationFrame(animate);
+  }
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
